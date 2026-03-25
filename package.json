@@ -1,0 +1,26 @@
+{
+  "name": "aimemory",
+  "version": "0.1.0",
+  "description": "Sync AI coding tool memory across Cursor, Claude Code, Codex, Windsurf, and GitHub Copilot",
+  "type": "module",
+  "bin": {
+    "aimemory": "./bin/aimemory.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/cli.ts",
+    "test": "tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "license": "MIT",
+  "keywords": ["ai", "memory", "cursor", "claude", "codex", "windsurf", "copilot", "sync"],
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsup": "^8.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.5.0"
+  }
+}
