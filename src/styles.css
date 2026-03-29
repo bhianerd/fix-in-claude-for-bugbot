@@ -1,0 +1,54 @@
+.fix-in-claude-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--fgColor-muted, var(--color-fg-muted, #656d76));
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.1s, background 0.1s, border-color 0.1s;
+}
+
+.fix-in-claude-btn:hover {
+  color: var(--fgColor-accent, var(--color-accent-fg, #0969da));
+  background: var(--bgColor-accent-muted, var(--color-accent-subtle, #ddf4ff));
+  border-color: var(--borderColor-accent-muted, var(--color-accent-muted, #54aeff66));
+}
+
+.fix-in-claude-btn:active {
+  opacity: 0.8;
+}
+
+.fix-in-claude-btn--copied {
+  color: var(--fgColor-success, var(--color-success-fg, #1a7f37));
+}
+
+/* Toast notification */
+.fix-in-claude-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--fgColor-onEmphasis, #fff);
+  background: var(--bgColor-emphasis, var(--color-neutral-emphasis, #24292f));
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 99999;
+  pointer-events: none;
+}
+
+.fix-in-claude-toast--visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
