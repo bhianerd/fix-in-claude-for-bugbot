@@ -53,64 +53,121 @@ function extractCommentText(el: Element): string {
   return body?.textContent?.trim() ?? el.textContent?.trim() ?? '';
 }
 
+// Regex that matches file paths like src/foo/bar.tsx, app/models/user.rb, etc.
+const FILE_PATH_RE = /(?:^|\s)((?:[\w@.-]+\/)+[\w.-]+\.[\w]{1,10})(?:\s|$)/;
+
 function extractFilePath(el: Element): string | null {
-  // Inline review comments live inside a file diff container
-  const fileHeader =
-    el.closest('.file')?.querySelector('.file-header') ??
-    el.closest('[data-path]');
-
-  if (fileHeader) {
-    const path =
-      fileHeader.getAttribute('data-path') ??
-      fileHeader.querySelector('.file-info a, [title]')?.getAttribute('title') ??
-      fileHeader.querySelector('.file-info a')?.textContent?.trim() ??
-      null;
-    if (path) return path;
+  // Strategy 1: data-path attribute on the element or ancestors
+  const dataPathEl = el.closest('[data-path]');
+  if (dataPathEl?.getAttribute('data-path')) {
+    return dataPathEl.getAttribute('data-path');
   }
 
-  // Try the review thread header
-  const thread = el.closest('.review-thread, .js-resolvable-timeline-thread-container');
-  if (thread) {
-    const threadPath = thread.querySelector('.file-header, [data-path]');
-    if (threadPath) {
-      return (
-        threadPath.getAttribute('data-path') ??
-        threadPath.textContent?.trim() ??
-        null
-      );
-    }
-    // GitHub shows file path as a link above the code snippet in conversation view
-    const fileLink = thread.querySelector('a[title][href*="#diff-"]');
-    if (fileLink) {
-      return fileLink.getAttribute('title') ?? fileLink.textContent?.trim() ?? null;
-    }
-  }
+  // Strategy 2: Walk up to the nearest thread/timeline container and search broadly
+  const container =
+    el.closest('.js-resolvable-timeline-thread-container') ??
+    el.closest('.review-thread') ??
+    el.closest('.js-timeline-item') ??
+    el.closest('.file') ??
+    el.closest('.inline-comments');
 
-  // Try to extract from the comment body itself — Bugbot often mentions the file path
-  const body = el.querySelector('.comment-body, .review-comment-body, .markdown-body');
-  if (body) {
-    // Look for file path patterns in code blocks or text
-    const codeEls = body.querySelectorAll('code');
-    for (const code of codeEls) {
-      const text = code.textContent ?? '';
-      // Match paths like src/foo/bar.ts
-      if (/^[\w./-]+\.\w{1,5}$/.test(text) && text.includes('/')) {
+  if (container) {
+    // 2a: data-path anywhere in the container
+    const dpEl = container.querySelector('[data-path]');
+    if (dpEl?.getAttribute('data-path')) {
+      return dpEl.getAttribute('data-path');
+    }
+
+    // 2b: Links with title attribute pointing to files (GitHub file links)
+    const fileLinks = container.querySelectorAll('a[title], a[href*="#diff-"]');
+    for (const link of fileLinks) {
+      const title = link.getAttribute('title') ?? '';
+      if (title.includes('/') && /\.\w{1,10}$/.test(title)) {
+        return title;
+      }
+      const text = link.textContent?.trim() ?? '';
+      if (text.includes('/') && /\.\w{1,10}$/.test(text) && !text.includes(' ')) {
         return text;
+      }
+    }
+
+    // 2c: Scan all text nodes in the container ABOVE the comment for file path patterns.
+    // The file path in GitHub's conversation view is rendered as plain text in a div
+    // above the code snippet table.
+    const allElements = container.querySelectorAll('*');
+    for (const child of allElements) {
+      // Stop when we reach the comment element itself
+      if (el.contains(child) || child.contains(el)) continue;
+
+      // Check if this element is above the comment in DOM order
+      if (el.compareDocumentPosition(child) & Node.DOCUMENT_POSITION_FOLLOWING) continue;
+
+      const text = child.textContent?.trim() ?? '';
+      // Short text that looks like a clean file path
+      if (text.length < 300 && text.includes('/') && /\.\w{1,10}$/.test(text)) {
+        const match = text.match(FILE_PATH_RE);
+        if (match) return match[1];
+        // If the entire text content is a path
+        if (/^[\w@./-]+\.\w{1,10}$/.test(text)) return text;
       }
     }
   }
 
-  // Look for file path in a sibling or parent element above the comment
-  const prevSibling = el.previousElementSibling;
-  if (prevSibling) {
-    const pathEl = prevSibling.querySelector('[data-path], .file-header a[title]');
-    if (pathEl) {
-      return pathEl.getAttribute('data-path') ?? pathEl.getAttribute('title') ?? null;
+  // Strategy 3: Walk up previous siblings from the comment
+  let sibling: Element | null = el.previousElementSibling;
+  let depth = 0;
+  while (sibling && depth < 5) {
+    // Check the sibling's text
+    const text = sibling.textContent?.trim() ?? '';
+    if (text.length < 300 && text.includes('/')) {
+      const match = text.match(FILE_PATH_RE);
+      if (match) return match[1];
+      if (/^[\w@./-]+\.\w{1,10}$/.test(text)) return text;
     }
-    // Check for text content that looks like a file path
-    const text = prevSibling.textContent?.trim() ?? '';
-    if (/^[\w./-]+\.\w{1,5}$/.test(text) && text.includes('/')) {
-      return text;
+    // Check data-path
+    const dp = sibling.getAttribute('data-path') ??
+      sibling.querySelector('[data-path]')?.getAttribute('data-path');
+    if (dp) return dp;
+
+    sibling = sibling.previousElementSibling;
+    depth++;
+  }
+
+  // Strategy 4: Walk up parent chain and check each parent's previous siblings
+  let parent: Element | null = el.parentElement;
+  let parentDepth = 0;
+  while (parent && parentDepth < 8) {
+    // Check parent for data-path
+    if (parent.getAttribute('data-path')) return parent.getAttribute('data-path');
+
+    let pSibling: Element | null = parent.previousElementSibling;
+    let psd = 0;
+    while (pSibling && psd < 3) {
+      const text = pSibling.textContent?.trim() ?? '';
+      if (text.length < 300 && text.includes('/')) {
+        const match = text.match(FILE_PATH_RE);
+        if (match) return match[1];
+        if (/^[\w@./-]+\.\w{1,10}$/.test(text)) return text;
+      }
+      const dp = pSibling.getAttribute('data-path') ??
+        pSibling.querySelector('[data-path]')?.getAttribute('data-path');
+      if (dp) return dp;
+      pSibling = pSibling.previousElementSibling;
+      psd++;
+    }
+    parent = parent.parentElement;
+    parentDepth++;
+  }
+
+  // Strategy 5: Check comment body for file paths mentioned by Bugbot
+  const body = el.querySelector('.comment-body, .review-comment-body, .markdown-body');
+  if (body) {
+    const codeEls = body.querySelectorAll('code');
+    for (const code of codeEls) {
+      const text = code.textContent?.trim() ?? '';
+      if (text.includes('/') && /\.\w{1,10}$/.test(text) && !text.includes(' ')) {
+        return text;
+      }
     }
   }
 
